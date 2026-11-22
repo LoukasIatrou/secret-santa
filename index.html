@@ -128,7 +128,7 @@ $("form").onsubmit = (ev) => {
   if (new Set(lower).size !== names.length) return ($("err").textContent = "Two people have the same name. Add a surname or initial.");
   const exclusions = [];
   for (const l of lines($("excl").value)) {
-    const pairNames = l.split(/\s*(?:&|,|\+|-|\band\b)\s*/i).map((s) => names[lower.indexOf(s.toLowerCase())]);
+    const pairNames = l.split(/\s*(?:&|,|\+|\band\b)\s*/i).map((s) => names[lower.indexOf(s.toLowerCase())]);
     if (pairNames.length !== 2 || pairNames.includes(undefined)) return ($("err").textContent = `Can't read "${l}". Use two names from the list, like "Ana & Ben".`);
     exclusions.push(pairNames);
   }
