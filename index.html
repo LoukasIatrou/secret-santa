@@ -117,7 +117,7 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
 </main>
 
 <script type="module">
-import { pair, decode, lock, unlock } from "./pair.js";
+import { pair, decode, lock, unlock } from "./pair.js?v=2";
 const $ = (id) => document.getElementById(id);
 const lines = (s) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
