@@ -58,14 +58,18 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
 
 <main id="app" hidden>
   <h1>KOZ <em>Secret Santa</em></h1>
-  <p class="lede">Type in everyone's name, draw, then share one group link. Everyone opens it, taps their own name and sees who they're gifting. Nobody, not even you, sees the full list.</p>
+  <p class="lede">Edit the group, set a code, draw, then send one link to the chat. Everyone enters the code, taps their own name and sees who they're gifting.</p>
 
   <form id="form">
     <div class="grid">
-      <div class="field"><label for="event">Group name <small>(optional)</small></label><input id="event" placeholder="Office party 2026"></div>
-      <div class="field"><label for="budget">Budget / date <small>(optional)</small></label><input id="budget" placeholder="€25 · swap on 20 Dec"></div>
-      <div class="field"><label for="names">Names <small>one per line</small></label><textarea id="names" required placeholder="Ana&#10;Ben&#10;Cleo&#10;Dimitris"></textarea></div>
-      <div class="field"><label for="excl">Can't draw each other <small>(optional) e.g. Ana &amp; Ben</small></label><textarea id="excl" placeholder="Ana &amp; Ben"></textarea></div>
+      <div class="field"><label for="event">Group name</label><input id="event" required></div>
+      <div class="field"><label for="code">Group code <small>people need it to get in</small></label><input id="code" required autocomplete="off" placeholder="e.g. KOZ2026"></div>
+      <div class="field"><label for="names">Names <small>one per line, edit freely</small></label><textarea id="names" required style="min-height:360px"></textarea></div>
+      <div>
+        <div class="field"><label for="budget">Budget / date <small>(optional)</small></label><input id="budget" placeholder="€25 · swap on 20 Dec"></div>
+        <div class="field"><label for="excl">Can't draw each other <small>(optional) e.g. Ana &amp; Ben</small></label><textarea id="excl" placeholder="Ana &amp; Ben"></textarea></div>
+        <button type="button" class="ghost" id="reset" data-testid="reset">Reset to the KOZ list</button>
+      </div>
     </div>
     <button type="submit" data-testid="draw">Draw names</button>
     <p class="err" id="err" role="alert"></p>
@@ -73,10 +77,20 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
 
   <section id="results" hidden aria-live="polite">
     <h2>Names drawn 🎁</h2>
-    <p class="lede" style="margin:0 0 16px">Send this link to the group chat. Each person taps their own name, honor system.</p>
+    <p class="lede" style="margin:0 0 16px">Send this link to the group chat and tell everyone the code. Changed something above? Draw again and send the new link.</p>
     <div class="field"><label for="groupUrl">Group link</label><input id="groupUrl" readonly></div>
     <button type="button" id="share" data-testid="share-group">Copy group link</button>
   </section>
+</main>
+
+<main id="gate" hidden>
+  <p class="tag">KOZ Secret Santa</p>
+  <h1>Enter the <em>code</em></h1>
+  <form id="gateForm" style="max-width:360px">
+    <div class="field"><label for="gateCode">Group code</label><input id="gateCode" required autocomplete="off" autocapitalize="characters"></div>
+    <button type="submit" data-testid="enter">Enter</button>
+    <p class="err" id="gateErr" role="alert"></p>
+  </form>
 </main>
 
 <main id="pick" hidden>
@@ -98,15 +112,22 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
       <p style="margin:16px 0 0">you're Secret Santa for</p>
       <p class="to" id="receiver"></p>
       <p class="tag" id="budgetTag" hidden></p>
-      <p><a href="./">Run your own draw</a></p>
     </div>
   </div>
 </main>
 
 <script type="module">
-import { pair, encode, decode } from "./pair.js";
+import { pair, decode, lock, unlock } from "./pair.js";
 const $ = (id) => document.getElementById(id);
 const lines = (s) => s.split("\n").map((x) => x.trim()).filter(Boolean);
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+const KOZ = { event: "KOZ 2026", code: "", budget: "", excl: "", names: [
+  "Andreas Kelesis", "Marinos Antoniou", "Giorgos Polycarpou", "Kyriakos (Rouvas)", "Yiannis Panayides",
+  "Alexandros Liassides", "Andreas Marangos", "Marios K. (Kyrou)", "Giorgos Kyprianou", "Andreas Ierotheou",
+  "Haris Marangos", "Michalis Aisdemetis (Kapitanos)", "Michalis K. (mk)", "Panayiotis Constantinides", "Loukas Iatrou",
+].join("\n") };
 
 function reveal({ g, r, e, b }) {
   $("giver").textContent = g;
@@ -115,41 +136,60 @@ function reveal({ g, r, e, b }) {
   if (b) { $("budgetTag").textContent = b; $("budgetTag").hidden = false; }
   document.title = `${g}'s KOZ Secret Santa`;
   $("open").onclick = () => { $("before").hidden = true; $("after").hidden = false; };
-  $("pick").hidden = true;
+  $("gate").hidden = $("pick").hidden = true;
   $("secret").hidden = false;
 }
 
-let data = null;
-try { data = location.hash.length > 1 && decode(location.hash.slice(1)); } catch {}
-if (data?.g) reveal(data); // old one-person links
-else if (data?.p) {
-  const { e, b, p } = data;
-  const key = "koz:" + location.hash;
-  let mine = null;
-  try { mine = localStorage.getItem(key); } catch {}
-  if (Object.hasOwn(p, mine ?? "")) reveal({ g: mine, r: p[mine], e, b });
-  else {
-    $("pickEvt").textContent = e || "KOZ Secret Santa";
-    for (const g of Object.keys(p)) {
-      const li = document.createElement("li");
-      const btn = document.createElement("button");
-      btn.type = "button"; btn.textContent = g; btn.style.fontSize = "18px";
-      btn.onclick = () => {
-        if (!confirm(`You're ${g}? This phone will stay as ${g}.`)) return;
-        try { localStorage.setItem(key, g); } catch {}
-        reveal({ g, r: p[g], e, b });
-      };
-      li.append(btn);
-      $("who").append(li);
-    }
-    $("pick").hidden = false;
+function showGroup({ e, b, p }, key) {
+  const mine = store.get(key + ":name");
+  if (Object.hasOwn(p, mine ?? "")) return reveal({ g: mine, r: p[mine], e, b });
+  $("pickEvt").textContent = e || "KOZ Secret Santa";
+  for (const g of Object.keys(p)) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.textContent = g; btn.style.fontSize = "18px";
+    btn.onclick = () => {
+      if (!confirm(`You're ${g}? This phone will stay as ${g}.`)) return;
+      store.set(key + ":name", g);
+      reveal({ g, r: p[g], e, b });
+    };
+    li.append(btn);
+    $("who").append(li);
   }
-} else {
-  if (location.hash.length > 1) history.replaceState(null, "", location.pathname);
+  $("gate").hidden = true;
+  $("pick").hidden = false;
+}
+
+const hash = location.hash.slice(1);
+let old = null;
+if (hash && !hash.startsWith("k.")) try { old = decode(hash); } catch {}
+
+if (hash.startsWith("k.")) {
+  const key = "koz:" + hash.slice(0, 40);
+  const tryCode = async (code) => { showGroup(await unlock(hash, code), key); store.set(key + ":code", code); };
+  const saved = store.get(key + ":code");
+  (saved ? tryCode(saved) : Promise.reject()).catch(() => { $("gate").hidden = false; });
+  $("gateForm").onsubmit = async (ev) => {
+    ev.preventDefault();
+    $("gateErr").textContent = "";
+    try { await tryCode($("gateCode").value); } catch { $("gateErr").textContent = "Wrong code. Check the group chat."; }
+  };
+} else if (old?.g) reveal(old); // links from the first version
+else if (old?.p) showGroup(old, "koz:#" + hash);
+else {
+  if (hash) history.replaceState(null, "", location.pathname);
+  // Organizer: restore the last edited draft, else the KOZ defaults.
+  let draft = KOZ;
+  try { draft = { ...KOZ, ...JSON.parse(store.get("koz:draft")) }; } catch {}
+  const fields = ["event", "code", "budget", "excl", "names"];
+  fields.forEach((f) => ($(f).value = draft[f]));
+  const save = () => store.set("koz:draft", JSON.stringify(Object.fromEntries(fields.map((f) => [f, $(f).value]))));
+  $("form").oninput = save;
+  $("reset").onclick = () => { if (confirm("Replace the names with the original KOZ list?")) { $("names").value = KOZ.names; save(); } };
   $("app").hidden = false;
 }
 
-$("form").onsubmit = (ev) => {
+$("form").onsubmit = async (ev) => {
   ev.preventDefault();
   $("err").textContent = "";
   const names = lines($("names").value);
@@ -166,7 +206,7 @@ $("form").onsubmit = (ev) => {
   if (!p) return ($("err").textContent = "No valid draw with those rules. Remove a restriction.");
 
   const e = $("event").value.trim(), b = $("budget").value.trim();
-  $("groupUrl").value = `${location.href.split("#")[0]}#${encode({ e, b, p })}`;
+  $("groupUrl").value = `${location.href.split("#")[0]}#${await lock({ e, b, p }, $("code").value)}`;
   $("share").textContent = "Copy group link";
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth" });

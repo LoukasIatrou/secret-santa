@@ -17,3 +17,22 @@ export function pair(names, exclusions = []) {
 // Link payloads: reversed base64 so a glance at the URL doesn't spoil anything (not real secrecy).
 export const encode = (o) => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).split("").reverse().join("");
 export const decode = (s) => JSON.parse(decodeURIComponent(escape(atob(s.split("").reverse().join("")))));
+
+// Code-locked group links: AES-GCM with a key derived from the group code. Wrong code => unlock throws.
+const te = new TextEncoder();
+const b64 = (u) => btoa(String.fromCharCode(...u)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+async function keyFor(code, salt) {
+  const base = await crypto.subtle.importKey("raw", te.encode(code.trim().toUpperCase()), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 200000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+export async function lock(obj, code) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await keyFor(code, salt), te.encode(JSON.stringify(obj)));
+  return "k." + b64(new Uint8Array([...salt, ...iv, ...new Uint8Array(ct)]));
+}
+export async function unlock(s, code) {
+  const u = unb64(s.slice(2));
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u.slice(16, 28) }, await keyFor(code, u.slice(0, 16)), u.slice(28));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
