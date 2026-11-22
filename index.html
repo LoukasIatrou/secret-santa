@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Secret Santa</title>
+<title>KOZ Secret Santa</title>
 <meta name="description" content="Draw Secret Santa names and send everyone a private link. No sign-up, nothing stored.">
-<meta property="og:title" content="Secret Santa">
+<meta property="og:title" content="KOZ Secret Santa">
 <meta property="og:description" content="Someone drew your name. Open your link to see who you're gifting.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎁</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -57,7 +57,7 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
 <a class="skip" href="#app">Skip to content</a>
 
 <main id="app" hidden>
-  <h1>Secret <em>Santa</em></h1>
+  <h1>KOZ <em>Secret Santa</em></h1>
   <p class="lede">Type in everyone's name, draw, then send each person their own link. Nobody, not even you, sees who got who.</p>
 
   <form id="form">
@@ -106,9 +106,9 @@ if (location.hash.length > 1) {
     const { g, r, e, b } = decode(location.hash.slice(1));
     $("giver").textContent = g;
     $("receiver").textContent = r;
-    $("evt").textContent = e || "Secret Santa";
+    $("evt").textContent = e || "KOZ Secret Santa";
     if (b) { $("budgetTag").textContent = b; $("budgetTag").hidden = false; }
-    document.title = `${g}'s Secret Santa`;
+    document.title = `${g}'s KOZ Secret Santa`;
     $("open").onclick = () => { $("before").hidden = true; $("after").hidden = false; };
     $("secret").hidden = false;
   } catch {
@@ -138,7 +138,7 @@ $("form").onsubmit = (ev) => {
   const e = $("event").value.trim(), b = $("budget").value.trim();
   const base = location.href.split("#")[0];
   $("list").replaceChildren();
-  all = (e ? `${e} — Secret Santa\n` : "Secret Santa\n") + names.map((g) => `${g}: ${base}#${encode({ g, r: p[g], e, b })}`).join("\n");
+  all = (e ? `${e} — KOZ Secret Santa\n` : "KOZ Secret Santa\n") + names.map((g) => `${g}: ${base}#${encode({ g, r: p[g], e, b })}`).join("\n");
   for (const g of names) {
     const url = `${base}#${encode({ g, r: p[g], e, b })}`;
     const li = document.createElement("li");
@@ -148,9 +148,9 @@ $("form").onsubmit = (ev) => {
     btn.type = "button"; btn.className = "ghost"; btn.textContent = navigator.share ? "Share link" : "Copy link";
     btn.setAttribute("aria-label", `${btn.textContent} for ${g}`);
     btn.onclick = async () => {
-      const text = `Hi ${g}! Your Secret Santa link 🎁`;
+      const text = `Hi ${g}! Your KOZ Secret Santa link 🎁`;
       try {
-        if (navigator.share) return await navigator.share({ title: "Secret Santa", text, url });
+        if (navigator.share) return await navigator.share({ title: "KOZ Secret Santa", text, url });
         await navigator.clipboard.writeText(`${text}\n${url}`);
         btn.textContent = "Copied ✓";
       } catch {}
