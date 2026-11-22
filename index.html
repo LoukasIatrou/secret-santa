@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secret Santa</title>
+<meta name="description" content="Draw Secret Santa names and send everyone a private link. No sign-up, nothing stored.">
+<meta property="og:title" content="Secret Santa">
+<meta property="og:description" content="Someone drew your name. Open your link to see who you're gifting.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎁</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6efe4; --ink: #1d2a22; --muted: #5b6a5f; --card: #fffaf2; --line: #d9cbb4;
+  --red: #b3261e; --red-ink: #fff; --green: #1f5c3a;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1a14; --ink: #f3eadb; --muted: #a8b5aa; --card: #17251d; --line: #2e4236;
+          --red: #e0574c; --red-ink: #1a0a08; --green: #7cc59a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 "DM Mono", ui-monospace, monospace; }
+a { color: inherit; }
+.skip { position: absolute; left: -999px; } .skip:focus { left: 16px; top: 16px; background: var(--card); padding: 8px; }
+main { max-width: 760px; margin: 0 auto; padding: 48px 16px 80px; }
+h1 { font: 900 clamp(48px, 11vw, 96px)/.9 Fraunces, serif; letter-spacing: -.03em; margin: 0 0 8px; }
+h1 em { color: var(--red); font-style: italic; }
+.lede { color: var(--muted); max-width: 46ch; margin: 0 0 40px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 620px) { .grid { grid-template-columns: 1fr; } }
+label { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+label small { text-transform: none; letter-spacing: 0; color: var(--muted); }
+input, textarea { width: 100%; font: inherit; color: inherit; background: var(--card); border: 1.5px solid var(--line); border-radius: 10px; padding: 12px; }
+textarea { min-height: 200px; resize: vertical; }
+:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+.field { margin-bottom: 16px; }
+button { font: 500 15px "DM Mono", monospace; cursor: pointer; border: 0; border-radius: 999px; padding: 14px 26px; background: var(--red); color: var(--red-ink); }
+button.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); padding: 8px 14px; font-size: 13px; }
+.err { color: var(--red); min-height: 1.5em; margin: 12px 0 0; }
+#results { margin-top: 40px; }
+#results h2 { font: 700 32px Fraunces, serif; margin: 0 0 4px; }
+ol { list-style: none; padding: 0; margin: 16px 0; border-top: 1.5px solid var(--line); }
+li { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1.5px solid var(--line); }
+li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap: anywhere; }
+.reveal { min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 16px; }
+.reveal .to { font: 900 clamp(56px, 16vw, 140px)/.95 Fraunces, serif; color: var(--red); margin: 12px 0 20px; overflow-wrap: anywhere;
+              animation: pop .7s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes pop { from { transform: scale(.4) rotate(-6deg); opacity: 0; } }
+.tag { display: inline-block; border: 1.5px dashed var(--line); border-radius: 10px; padding: 8px 14px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .reveal .to { animation: none; } }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<a class="skip" href="#app">Skip to content</a>
+
+<main id="app" hidden>
+  <h1>Secret <em>Santa</em></h1>
+  <p class="lede">Type in everyone's name, draw, then send each person their own link. Nobody, not even you, sees who got who.</p>
+
+  <form id="form">
+    <div class="grid">
+      <div class="field"><label for="event">Group name <small>(optional)</small></label><input id="event" placeholder="Office party 2026"></div>
+      <div class="field"><label for="budget">Budget / date <small>(optional)</small></label><input id="budget" placeholder="€25 · swap on 20 Dec"></div>
+      <div class="field"><label for="names">Names <small>one per line</small></label><textarea id="names" required placeholder="Ana&#10;Ben&#10;Cleo&#10;Dimitris"></textarea></div>
+      <div class="field"><label for="excl">Can't draw each other <small>(optional) e.g. Ana &amp; Ben</small></label><textarea id="excl" placeholder="Ana &amp; Ben"></textarea></div>
+    </div>
+    <button type="submit" data-testid="draw">Draw names</button>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+
+  <section id="results" hidden aria-live="polite">
+    <h2>Names drawn 🎁</h2>
+    <p class="lede" style="margin:0">Send each person their link. Opening someone else's link spoils it for you.</p>
+    <ol id="list"></ol>
+    <button type="button" class="ghost" id="copyAll" data-testid="copy-all">Copy all links</button>
+  </section>
+</main>
+
+<main id="secret" class="reveal" hidden>
+  <div>
+    <p class="tag" id="evt"></p>
+    <h1 style="font-size:clamp(36px,9vw,64px)">Hi <span id="giver"></span>,</h1>
+    <div id="before">
+      <p class="lede" style="margin:8px auto 28px">Make sure nobody's looking over your shoulder.</p>
+      <button id="open" data-testid="reveal">Show who I'm gifting</button>
+    </div>
+    <div id="after" hidden>
+      <p style="margin:16px 0 0">you're Secret Santa for</p>
+      <p class="to" id="receiver"></p>
+      <p class="tag" id="budgetTag" hidden></p>
+      <p><a href="./">Run your own draw</a></p>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { pair, encode, decode } from "./pair.js";
+const $ = (id) => document.getElementById(id);
+const lines = (s) => s.split("\n").map((x) => x.trim()).filter(Boolean);
+
+if (location.hash.length > 1) {
+  try {
+    const { g, r, e, b } = decode(location.hash.slice(1));
+    $("giver").textContent = g;
+    $("receiver").textContent = r;
+    $("evt").textContent = e || "Secret Santa";
+    if (b) { $("budgetTag").textContent = b; $("budgetTag").hidden = false; }
+    document.title = `${g}'s Secret Santa`;
+    $("open").onclick = () => { $("before").hidden = true; $("after").hidden = false; };
+    $("secret").hidden = false;
+  } catch {
+    location.replace(location.pathname);
+  }
+} else {
+  $("app").hidden = false;
+}
+
+let all = "";
+$("form").onsubmit = (ev) => {
+  ev.preventDefault();
+  $("err").textContent = "";
+  const names = lines($("names").value);
+  const lower = names.map((n) => n.toLowerCase());
+  if (names.length < 3) return ($("err").textContent = "Add at least 3 people.");
+  if (new Set(lower).size !== names.length) return ($("err").textContent = "Two people have the same name. Add a surname or initial.");
+  const exclusions = [];
+  for (const l of lines($("excl").value)) {
+    const pairNames = l.split(/\s*(?:&|,|\+|-|\band\b)\s*/i).map((s) => names[lower.indexOf(s.toLowerCase())]);
+    if (pairNames.length !== 2 || pairNames.includes(undefined)) return ($("err").textContent = `Can't read "${l}". Use two names from the list, like "Ana & Ben".`);
+    exclusions.push(pairNames);
+  }
+  const p = pair(names, exclusions);
+  if (!p) return ($("err").textContent = "No valid draw with those rules. Remove a restriction.");
+
+  const e = $("event").value.trim(), b = $("budget").value.trim();
+  const base = location.href.split("#")[0];
+  $("list").replaceChildren();
+  all = (e ? `${e} — Secret Santa\n` : "Secret Santa\n") + names.map((g) => `${g}: ${base}#${encode({ g, r: p[g], e, b })}`).join("\n");
+  for (const g of names) {
+    const url = `${base}#${encode({ g, r: p[g], e, b })}`;
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = g;
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "ghost"; btn.textContent = navigator.share ? "Share link" : "Copy link";
+    btn.setAttribute("aria-label", `${btn.textContent} for ${g}`);
+    btn.onclick = async () => {
+      const text = `Hi ${g}! Your Secret Santa link 🎁`;
+      try {
+        if (navigator.share) return await navigator.share({ title: "Secret Santa", text, url });
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        btn.textContent = "Copied ✓";
+      } catch {}
+    };
+    li.append(span, btn);
+    $("list").append(li);
+  }
+  $("results").hidden = false;
+  $("results").scrollIntoView({ behavior: "smooth" });
+};
+$("copyAll").onclick = async () => {
+  await navigator.clipboard.writeText(all);
+  $("copyAll").textContent = "Copied ✓";
+};
+</script>
+</body>
+</html>
