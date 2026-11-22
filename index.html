@@ -58,7 +58,7 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
 
 <main id="app" hidden>
   <h1>KOZ <em>Secret Santa</em></h1>
-  <p class="lede">Type in everyone's name, draw, then send each person their own link. Nobody, not even you, sees who got who.</p>
+  <p class="lede">Type in everyone's name, draw, then share one group link. Everyone opens it, taps their own name and sees who they're gifting. Nobody, not even you, sees the full list.</p>
 
   <form id="form">
     <div class="grid">
@@ -73,10 +73,17 @@ li span { flex: 1; font-family: Fraunces, serif; font-size: 20px; overflow-wrap:
 
   <section id="results" hidden aria-live="polite">
     <h2>Names drawn 🎁</h2>
-    <p class="lede" style="margin:0">Send each person their link. Opening someone else's link spoils it for you.</p>
-    <ol id="list"></ol>
-    <button type="button" class="ghost" id="copyAll" data-testid="copy-all">Copy all links</button>
+    <p class="lede" style="margin:0 0 16px">Send this link to the group chat. Each person taps their own name, honor system.</p>
+    <div class="field"><label for="groupUrl">Group link</label><input id="groupUrl" readonly></div>
+    <button type="button" id="share" data-testid="share-group">Copy group link</button>
   </section>
+</main>
+
+<main id="pick" hidden>
+  <p class="tag" id="pickEvt"></p>
+  <h1>Who are <em>you?</em></h1>
+  <p class="lede">Tap your own name. No peeking at anyone else's.</p>
+  <ol id="who"></ol>
 </main>
 
 <main id="secret" class="reveal" hidden>
@@ -101,24 +108,47 @@ import { pair, encode, decode } from "./pair.js";
 const $ = (id) => document.getElementById(id);
 const lines = (s) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
-if (location.hash.length > 1) {
-  try {
-    const { g, r, e, b } = decode(location.hash.slice(1));
-    $("giver").textContent = g;
-    $("receiver").textContent = r;
-    $("evt").textContent = e || "KOZ Secret Santa";
-    if (b) { $("budgetTag").textContent = b; $("budgetTag").hidden = false; }
-    document.title = `${g}'s KOZ Secret Santa`;
-    $("open").onclick = () => { $("before").hidden = true; $("after").hidden = false; };
-    $("secret").hidden = false;
-  } catch {
-    location.replace(location.pathname);
+function reveal({ g, r, e, b }) {
+  $("giver").textContent = g;
+  $("receiver").textContent = r;
+  $("evt").textContent = e || "KOZ Secret Santa";
+  if (b) { $("budgetTag").textContent = b; $("budgetTag").hidden = false; }
+  document.title = `${g}'s KOZ Secret Santa`;
+  $("open").onclick = () => { $("before").hidden = true; $("after").hidden = false; };
+  $("pick").hidden = true;
+  $("secret").hidden = false;
+}
+
+let data = null;
+try { data = location.hash.length > 1 && decode(location.hash.slice(1)); } catch {}
+if (data?.g) reveal(data); // old one-person links
+else if (data?.p) {
+  const { e, b, p } = data;
+  const key = "koz:" + location.hash;
+  let mine = null;
+  try { mine = localStorage.getItem(key); } catch {}
+  if (Object.hasOwn(p, mine ?? "")) reveal({ g: mine, r: p[mine], e, b });
+  else {
+    $("pickEvt").textContent = e || "KOZ Secret Santa";
+    for (const g of Object.keys(p)) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.textContent = g; btn.style.fontSize = "18px";
+      btn.onclick = () => {
+        if (!confirm(`You're ${g}? This phone will stay as ${g}.`)) return;
+        try { localStorage.setItem(key, g); } catch {}
+        reveal({ g, r: p[g], e, b });
+      };
+      li.append(btn);
+      $("who").append(li);
+    }
+    $("pick").hidden = false;
   }
 } else {
+  if (location.hash.length > 1) history.replaceState(null, "", location.pathname);
   $("app").hidden = false;
 }
 
-let all = "";
 $("form").onsubmit = (ev) => {
   ev.preventDefault();
   $("err").textContent = "";
@@ -136,34 +166,16 @@ $("form").onsubmit = (ev) => {
   if (!p) return ($("err").textContent = "No valid draw with those rules. Remove a restriction.");
 
   const e = $("event").value.trim(), b = $("budget").value.trim();
-  const base = location.href.split("#")[0];
-  $("list").replaceChildren();
-  all = (e ? `${e} — KOZ Secret Santa\n` : "KOZ Secret Santa\n") + names.map((g) => `${g}: ${base}#${encode({ g, r: p[g], e, b })}`).join("\n");
-  for (const g of names) {
-    const url = `${base}#${encode({ g, r: p[g], e, b })}`;
-    const li = document.createElement("li");
-    const span = document.createElement("span");
-    span.textContent = g;
-    const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "ghost"; btn.textContent = navigator.share ? "Share link" : "Copy link";
-    btn.setAttribute("aria-label", `${btn.textContent} for ${g}`);
-    btn.onclick = async () => {
-      const text = `Hi ${g}! Your KOZ Secret Santa link 🎁`;
-      try {
-        if (navigator.share) return await navigator.share({ title: "KOZ Secret Santa", text, url });
-        await navigator.clipboard.writeText(`${text}\n${url}`);
-        btn.textContent = "Copied ✓";
-      } catch {}
-    };
-    li.append(span, btn);
-    $("list").append(li);
-  }
+  $("groupUrl").value = `${location.href.split("#")[0]}#${encode({ e, b, p })}`;
+  $("share").textContent = "Copy group link";
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth" });
 };
-$("copyAll").onclick = async () => {
-  await navigator.clipboard.writeText(all);
-  $("copyAll").textContent = "Copied ✓";
+$("share").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("groupUrl").value);
+    $("share").textContent = "Copied ✓";
+  } catch { $("groupUrl").select(); }
 };
 </script>
 </body>
